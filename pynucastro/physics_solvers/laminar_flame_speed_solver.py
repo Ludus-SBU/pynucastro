@@ -16,12 +16,33 @@ eos = pyna.StellarEOS()
 # Loading in a Network
 net = pyna.common_networks.approx13()
 
+def invert_eos_for_rho(T, p_fixed, Y):
+    def shooter(rho, T, Y):
+        state = eos.pe_state(rho, T, Y)
+        residual = state.p - p_fixed
+        return residual
+
+    rho_lower_bound = 1e6 # may need to change this
+    rho_upper_bound = 1e9 # may need to change this
+
+    rho_from_inverted_eos = brentq(
+        f=shooter,
+        a=rho_lower_bound,
+        b=rho_upper_bound,
+        args=(T, Y)
+    )
+
+    state_final = eos.pe_state(rho_from_inverted_eos, T, Y)
+
+    return rho_from_inverted_eos, state_final.cp
+
+
 def RHS(t, y, S_lam, p_fixed):
     # 0) Unpack variables from y
     F, T, *Y = y
     Y = np.array(Y)
     # 1) get rho, cp from EOS
-    rho, cp = eos(T, p_fixed, Y) '''NEEDS WORK'''
+    rho, cp = invert_eos_for_rho(T, p_fixed, Y)
     # 2) Create RHS of dYdt diff eqs
     dYdt = net.rhs(t, Y, rho, T, screen_func=chugunov_2007)
     # 3) Compute epsilon via dYdt equations
