@@ -16,10 +16,6 @@ eos = pyna.StellarEOS()
 # Loading in a Network
 net = pyna.common_networks.approx13()
 
-def get_init_comps(X4, X12, X16, X20):
-    # NEEDS WORK
-    return Y0_comp
-
 def RHS(t, y, S_lam, p_fixed):
     # 0) Unpack variables from y
     F, T, *Y = y
@@ -64,15 +60,16 @@ p_fixed = # Need to set (if needed)
 tmax = 1e-6 # will need to change this
 
 # Defining initial mass fractions
-X4 = 0
-X12 = 0.5
-X16 = 0.5
-X20 = 0
+X0 = np.zeros(net.nnuc)
+X0[net.jhe4] = 0
+X0[net.jc12] = 0.5
+X0[net.jo16] = 0.5
+X0[net.ne20] = 0
 
-Y0_comp = get_init_comps(X4, X12, X16, X20)
+Y0 = X0/net.A
 
 # Initial state vector
-y0 = [F0, T_fuel, *Y0_comp]
+y0 = [F0, T_fuel, *Y0]
 
 
 ## Using brentq to Find The Root
