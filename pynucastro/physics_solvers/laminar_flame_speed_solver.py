@@ -8,7 +8,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.optimize import brentq
 import pynucastro as pyna
-from pynucastro.screening import screen5 # Importing our specific screening rate
+from pynucastro.screening import chugunov_2007 # Importing our specific screening rate
 
 # Load your EOS
 eos = pyna.StellarEOS()
@@ -22,10 +22,10 @@ def RHS(t, y, S_lam, p_fixed):
     Y = np.array(Y)
     # 1) get rho, cp from EOS
     rho, cp = eos(T, p_fixed, Y) '''NEEDS WORK'''
-    # 2) Integrate screened reaction network -> dY_i/dt, epsilon
-    dYdt = net.rhs(T, rho, Y) '''NEEDS WORK'''
-    # 3) Compute epsilon via dY_i/dt
-    epsilon = net.energy_release(dYdt, Y) ''' NEEDS WORK '''
+    # 2) Create RHS of dYdt diff eqs
+    dYdt = net.rhs(t, Y, rho, T, screen_func=chugunov_2007)
+    # 3) Compute epsilon via dYdt equations
+    epsilon = net.energy_release(dYdt)
     # 4) Conductivity -> K & opacities
     K = conductivity(rho, T, Y) ''' NEEDS WORK '''
     # 5) dTdt and dFdt
