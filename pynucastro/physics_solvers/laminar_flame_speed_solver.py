@@ -17,6 +17,19 @@ eos = pyna.StellarEOS()
 # Loading in a Network
 net = pyna.common_networks.approx13()
 
+def negative_F_check(t, y, S_lam, p_fixed):
+    return y[0]
+
+def divergent_F_check(t, y, S_lam, p_fixed):
+    return (1e12 - y[0])
+
+negative_F_check.terminal = True
+negative_F_check.direction = -1
+
+divergent_F_check.terminal = True
+divergent_F_check.direction = -1
+
+
 def invert_eos_for_rho(T, p_fixed, Y):
     # This function finds rho via another shooting method
     def shooter(rho, T, Y):
@@ -65,7 +78,8 @@ def integrator(S_lam, y0, p_fixed, tmax):
         fun=RHS,
         t_span=[0, tmax], 
         y0=y0,
-        args=(S_lam, p_fixed), 
+        args=(S_lam, p_fixed),
+        events=(negative_F_check, divergent_F_check), 
         method='BDF', 
         rtol=1e-5, 
         atol=1e-8
