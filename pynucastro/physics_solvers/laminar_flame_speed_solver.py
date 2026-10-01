@@ -9,6 +9,7 @@ from scipy.integrate import solve_ivp
 from scipy.optimize import brentq
 import pynucastro as pyna
 from pynucastro.screening import chugunov_2007 # Importing our specific screening rate
+from pynucastro.conductivity import Conductivity
 
 # Load your EOS
 eos = pyna.StellarEOS()
@@ -51,7 +52,7 @@ def RHS(t, y, S_lam, p_fixed):
     # 3) Compute epsilon via dYdt equations
     epsilon = net.energy_release(dYdt)
     # 4) Conductivity -> K & opacities
-    K = conductivity(state, net) ''' NEEDS WORK '''
+    K = Conductivity.get_K(state, net)
     # 5) dTdt and dFdt
     dTdt = -S_lam * F / K
     dFdt = (S_lam * rho * epsilon) - S_lam**2 * rho * cp * F / K
