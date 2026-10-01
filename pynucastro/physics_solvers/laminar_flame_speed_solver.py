@@ -17,6 +17,7 @@ eos = pyna.StellarEOS()
 net = pyna.common_networks.approx13()
 
 def invert_eos_for_rho(T, p_fixed, Y):
+    # This function finds rho via another shooting method
     def shooter(rho, T, Y):
         state = eos.pe_state(rho, T, Y)
         residual = state.p - p_fixed
@@ -34,7 +35,7 @@ def invert_eos_for_rho(T, p_fixed, Y):
 
     state_final = eos.pe_state(rho_from_inverted_eos, T, Y)
 
-    return rho_from_inverted_eos, state_final.cp
+    return state_final
 
 
 def RHS(t, y, S_lam, p_fixed):
@@ -42,13 +43,15 @@ def RHS(t, y, S_lam, p_fixed):
     F, T, *Y = y
     Y = np.array(Y)
     # 1) get rho, cp from EOS
-    rho, cp = invert_eos_for_rho(T, p_fixed, Y)
+    state = invert_eos_for_rho(T, p_fixed, Y)
+    rho = state.rho
+    cp  = state.cp
     # 2) Create RHS of dYdt diff eqs
     dYdt = net.rhs(t, Y, rho, T, screen_func=chugunov_2007)
     # 3) Compute epsilon via dYdt equations
     epsilon = net.energy_release(dYdt)
     # 4) Conductivity -> K & opacities
-    K = conductivity(rho, T, Y) ''' NEEDS WORK '''
+    K = conductivity(state, net) ''' NEEDS WORK '''
     # 5) dTdt and dFdt
     dTdt = -S_lam * F / K
     dFdt = (S_lam * rho * epsilon) - S_lam**2 * rho * cp * F / K
