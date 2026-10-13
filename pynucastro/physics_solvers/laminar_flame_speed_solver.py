@@ -15,12 +15,21 @@ import pynucastro as pyna
 print("Importing screening...")
 from pynucastro.screening import chugunov_2007 # Importing our specific screening rate
 print("Importing conductivity...")
-from pynucastro.conductivity import conductivity
+from pynucastro.conductivity.conductivity import Conductivity
+print("Importing composition...")
+from pynucastro.nucdata import Composition
+print("Importing Electron EOS")
+from pynucastro.eos.electron_eos import ElectronEOS
+
 
 # Load your EOS
 print("Loading EOS")
 eos = pyna.StellarEOS()
 print("EOS Loaded")
+
+# Loading in Electron EOS
+ele_eos = ElectronEOS(include_positrons=True)
+print("Electron EOS Loaded")
 
 # Loading in a Network
 print("Loading in Network")
@@ -40,10 +49,10 @@ divergent_F_check.terminal = True
 divergent_F_check.direction = -1
 
 
-def invert_eos_for_rho(T, p_fixed, Y):
+def invert_eos_for_rho(T, p_fixed, comp):
     # This function finds rho via another shooting method
-    def shooter(rho, T, Y):
-        state = eos.pe_state(rho, T, Y)
+    def shooter(rho, T, comp):
+        state = eos.pe_state(rho, T, comp)
         residual = state.p - p_fixed
         return residual
 
@@ -54,28 +63,38 @@ def invert_eos_for_rho(T, p_fixed, Y):
         f=shooter,
         a=rho_lower_bound,
         b=rho_upper_bound,
-        args=(T, Y)
+        args=(T, comp)
     )
 
-    state_final = eos.pe_state(rho_from_inverted_eos, T, Y)
+    state_final = eos.pe_state(rho_from_inverted_eos, T, comp)
 
-    return state_final
+    return state_final, rho_from_inverted_eos
 
 
 def RHS(t, y, S_lam, p_fixed, rho_fuel):
     # 0) Unpack variables from y
     F, T, *Y = y
     Y = np.array(Y)
+
+    comp = Composition(net.unique_nuclei)
+    comp.set_molar_array(Y)
+
+    thermo = pyna.ThermoState(rho=rho, T=T, comp=comp)
+
     # 1) get rho, cp from EOS
-    state = invert_eos_for_rho(T, p_fixed, Y)
-    rho = state.rho
-    cp  = state.cp
+    state, rho = invert_eos_for_rho(T, p_fixed, comp)
+    cp  = state.c_p
     # 2) Create RHS of dYdt diff eqs
-    dYdt = net.rhs(t, Y, rho, T, screen_func=chugunov_2007)
+    ydots = net.evaluate_ydots(thermo, screen_func=chugunov_2007)
+    dYdt = np.array([ydots[nuc] for nuc in net.unique_nuclei])
     # 3) Compute epsilon via dYdt equations
-    epsilon = net.energy_release(dYdt)
+    epsilon = net.evaluate_energy_generation(thermo, screen_func=chugunov_2007)
+    
+    ele_state, pos_state = ele_eos.pe_state(rho, T, comp)
+    p_ele = ele_state.p + pos_state.p
+
     # 4) Conductivity -> K & opacities
-    K = conductivity.get_K(state, net)
+    K = Conductivity.get_K(state, comp, rho, T, p_ele, net)
     # 5) Compute u
     u = rho_fuel * S_lam / rho
     # 6) dTdt and dFdt
@@ -111,7 +130,7 @@ T_fuel = 1e9 # Need to set
 rho_fuel = 2e9 # Need to set
 
 F0 = 2e-8 # arbitrarily small positive value
-tmax = 1e-8 # will need to change this
+tmax = 1e-9 # will need to change this
 
 # Setting initial mass fractions
 species = net.unique_nuclei
@@ -136,8 +155,13 @@ Y0 = X0/A
 # Initial state vector
 y0 = [F0, T_fuel, *Y0]
 
+comp = pyna.Composition(net.unique_nuclei)
+
+for nuc in net.unique_nuclei:
+    comp.set_nuc(nuc, X0[ids[nuc]])
+
 # Finding the Fixed Pressure
-state = eos.pe_state(rho_fuel, T_fuel, Y0)
+state = eos.pe_state(rho_fuel, T_fuel, comp)
 p_fixed = state.p
 print(f"Fixed pressure p = {p_fixed}")
 
