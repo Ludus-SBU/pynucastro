@@ -79,11 +79,12 @@ def RHS(t, y, S_lam, p_fixed, rho_fuel):
     comp = Composition(net.unique_nuclei)
     comp.set_molar_array(Y)
 
-    thermo = pyna.ThermoState(rho=rho, T=T, comp=comp)
-
     # 1) get rho, cp from EOS
     state, rho = invert_eos_for_rho(T, p_fixed, comp)
     cp  = state.c_p
+
+    thermo = pyna.ThermoState(rho=rho, T=T, comp=comp)
+    
     # 2) Create RHS of dYdt diff eqs
     ydots = net.evaluate_ydots(thermo, screen_func=chugunov_2007)
     dYdt = np.array([ydots[nuc] for nuc in net.unique_nuclei])
@@ -130,7 +131,7 @@ T_fuel = 1e9 # Need to set
 rho_fuel = 2e9 # Need to set
 
 F0 = 2e-8 # arbitrarily small positive value
-tmax = 1e-9 # will need to change this
+tmax = 1e-8 # will need to change this
 
 # Setting initial mass fractions
 species = net.unique_nuclei
