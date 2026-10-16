@@ -21,6 +21,20 @@ from pynucastro.nucdata import Composition
 print("Importing Electron EOS")
 from pynucastro.eos.electron_eos import ElectronEOS
 
+rl = pyna.ReacLibLibrary()
+
+all_nuclei = ["p", "he4",
+              "c12", "n13",
+              "o16", "f17", 
+              "ne20", "na23",
+              "mg24", "al27", "si28",
+              "p31", "s32", "cl35",
+              "ar36", "k39", "ca40",
+              "sc43", "ti44", "v47",
+              "cr48", "mn51",
+              "fe52","co55","ni56"]
+
+lib = rl.linking_nuclei(all_nuclei)
 
 # Load your EOS
 print("Loading EOS")
@@ -33,7 +47,7 @@ print("Electron EOS Loaded")
 
 # Loading in a Network
 print("Loading in Network")
-net = pyna.common_networks.aprox13()
+net = pyna.PythonNetwork(libraries=[lib])
 print("Network Loaded")
 
 def negative_F_check(t, y, S_lam, p_fixed, rho_fuel):
@@ -84,7 +98,7 @@ def RHS(t, y, S_lam, p_fixed, rho_fuel):
     cp  = state.c_p
 
     thermo = pyna.ThermoState(rho=rho, T=T, comp=comp)
-    
+
     # 2) Create RHS of dYdt diff eqs
     ydots = net.evaluate_ydots(thermo, screen_func=chugunov_2007)
     dYdt = np.array([ydots[nuc] for nuc in net.unique_nuclei])
@@ -120,6 +134,14 @@ def integrator(S_lam, y0, p_fixed, tmax, rho_fuel):
     # Extracting the solution
     F_final = sol.y[0, -1] # indexed as [state variable, time point]
 
+    if sol.t_events[0].size > 0:
+        print("Integrator stopped due to negative F")
+    elif sol.t_events[1].size > 0:
+        print("Integrator stopped because F diverged")
+    else:
+        print("Integrator stopped because tmax was reached")
+
+
     print(f"Tried S_lam = {S_lam}, returned F = {F_final}")
 
     # Returning the function we are trying to get to zero
@@ -131,7 +153,7 @@ T_fuel = 1e9 # Need to set
 rho_fuel = 2e9 # Need to set
 
 F0 = 2e-8 # arbitrarily small positive value
-tmax = 1e-8 # will need to change this
+tmax = 1e-7 # will need to change this
 
 # Setting initial mass fractions
 species = net.unique_nuclei
@@ -169,7 +191,7 @@ print(f"Fixed pressure p = {p_fixed}")
 
 ## Using brentq to Find The Root
 S_lam_lower_bound = 1e4 #cm/s
-S_lam_upper_bound = 1e8 #cm/s
+S_lam_upper_bound = 1e10 #cm/s
 
 print("Beginning Shooter")
 S_lam_solution, details = brentq(
