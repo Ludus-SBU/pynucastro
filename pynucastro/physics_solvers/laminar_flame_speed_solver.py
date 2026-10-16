@@ -4,6 +4,7 @@
 # Author - Josh Martin 2026
 
 # Loading dependencies
+import matplotlib.pyplot as plt
 print("Importing numpy...")
 import numpy as np
 print("Importing solve_ivp...")
@@ -49,6 +50,71 @@ print("Electron EOS Loaded")
 print("Loading in Network")
 net = pyna.PythonNetwork(libraries=[lib])
 print("Network Loaded")
+
+def plot_F(t, F, S_lam):
+    fig = plt.figure()
+    ax = fig.add_subplot(111) #(111) meaning (nrows, ncols, index) 
+    
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Heat Flux")
+
+    ax.plot(t[1:], F[1:], "-r", lw = 3)
+
+    plt.tick_params(axis='both')  # Make tick labels larger
+
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+
+    ax.set_xlim(1e-10, 1e-7)
+    ax.set_ylim(1e18, 1e23)
+
+    plt.savefig(f"/gpfs/projects/CalderGroup/JoshSpace/flame_speed_plots/HeatFlux_S_lam_{S_lam:.2e}.png")
+    plt.close(fig)
+
+def plot_T(t, T, S_lam):
+    fig = plt.figure()
+    ax = fig.add_subplot(111) #(111) meaning (nrows, ncols, index) 
+    
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Temp (K)")
+
+    ax.plot(t[1:], T[1:], "-r", lw = 3)
+
+    plt.tick_params(axis='both')  # Make tick labels larger
+
+    ax.set_xscale("log")
+    ax.set_yscale("linear")
+
+    ax.set_xlim(1e-10, 1e-7)
+
+    plt.savefig(f"/gpfs/projects/CalderGroup/JoshSpace/flame_speed_plots/Temp_S_lam_{S_lam:.2e}.png")
+    plt.close(fig)
+
+def plot_X(t, Y, S_lam, all_nuclei, A):
+    fig = plt.figure()
+    ax = fig.add_subplot(111) #(111) meaning (nrows, ncols, index) 
+    
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Mass Fraction")
+
+    # X = Y * A
+    ax.plot(t[1:], A[2] * Y[2, 1:], "-r", label=all_nuclei[2], lw = 2)
+    ax.plot(t[1:], A[4] * Y[4, 1:], "-b", label=all_nuclei[4], lw = 2)
+    ax.plot(t[1:], A[6] * Y[6, 1:], "-g", label=all_nuclei[6], lw = 2)
+    ax.plot(t[1:], A[8] * Y[8, 1:], color="gold", label=all_nuclei[8], lw = 2)
+    ax.plot(t[1:], A[10]* Y[10, 1:], color="purple", label=all_nuclei[10], lw = 2)
+    ax.plot(t[1:], A[24]* Y[24, 1:], color="pink", label=all_nuclei[24], lw = 2)
+
+    plt.tick_params(axis='both')  # Make tick labels larger
+
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+
+    ax.set_xlim(1e-10, 1e-7)
+    ax.legend()
+
+    plt.savefig(f"/gpfs/projects/CalderGroup/JoshSpace/flame_speed_plots/Comp_S_lam_{S_lam:.2e}.png")
+    plt.close(fig)
 
 def negative_F_check(t, y, S_lam, p_fixed, rho_fuel):
     return y[0]
@@ -119,7 +185,7 @@ def RHS(t, y, S_lam, p_fixed, rho_fuel):
     return [dFdt, dTdt, *dYdt]
 
 
-def integrator(S_lam, y0, p_fixed, tmax, rho_fuel):
+def integrator(S_lam, y0, p_fixed, tmax, rho_fuel, all_nuclei, A):
     sol = solve_ivp(
         fun=RHS,
         t_span=[0, tmax], 
@@ -143,6 +209,16 @@ def integrator(S_lam, y0, p_fixed, tmax, rho_fuel):
 
 
     print(f"Tried S_lam = {S_lam}, returned F = {F_final}")
+
+    # Extracting full solutions for plots
+    t = sol.t
+    F = sol.y[0, :]
+    T = sol.y[1, :]
+    Y = sol.y[2:, :]
+
+    plot_F(t, F, S_lam)
+    plot_T(t, T, S_lam)
+    plot_X(t, Y, S_lam, all_nuclei, A)
 
     # Returning the function we are trying to get to zero
     return F_final
@@ -191,14 +267,14 @@ print(f"Fixed pressure p = {p_fixed}")
 
 ## Using brentq to Find The Root
 S_lam_lower_bound = 1e4 #cm/s
-S_lam_upper_bound = 1e10 #cm/s
+S_lam_upper_bound = 1e5 #cm/s
 
 print("Beginning Shooter")
 S_lam_solution, details = brentq(
     f=integrator,
     a=S_lam_lower_bound,
     b=S_lam_upper_bound,
-    args=(y0, p_fixed, tmax, rho_fuel),
+    args=(y0, p_fixed, tmax, rho_fuel, all_nuclei, A),
     full_output=True
 )
 
