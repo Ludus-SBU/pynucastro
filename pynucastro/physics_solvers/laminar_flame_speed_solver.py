@@ -58,15 +58,15 @@ def plot_F(t, F, S_lam):
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Heat Flux")
 
-    ax.plot(t[1:], F[1:], "-r", lw = 3)
+    ax.plot(t[1:], np.abs(F[1:]), "-r", lw = 3)
 
     plt.tick_params(axis='both')  # Make tick labels larger
 
     ax.set_xscale("log")
     ax.set_yscale("log")
 
-    ax.set_xlim(1e-10, 1e-7)
-    ax.set_ylim(1e18, 1e23)
+    ax.set_xlim(1e-10, 1e-6)
+    #ax.set_ylim(1e18, 1e23)
 
     plt.savefig(f"/gpfs/projects/CalderGroup/JoshSpace/flame_speed_plots/HeatFlux_S_lam_{S_lam:.2e}.png")
     plt.close(fig)
@@ -83,9 +83,9 @@ def plot_T(t, T, S_lam):
     plt.tick_params(axis='both')  # Make tick labels larger
 
     ax.set_xscale("log")
-    ax.set_yscale("linear")
+    ax.set_yscale("log")
 
-    ax.set_xlim(1e-10, 1e-7)
+    ax.set_xlim(1e-10, 1e-6)
 
     plt.savefig(f"/gpfs/projects/CalderGroup/JoshSpace/flame_speed_plots/Temp_S_lam_{S_lam:.2e}.png")
     plt.close(fig)
@@ -110,20 +110,21 @@ def plot_X(t, Y, S_lam, all_nuclei, A):
     ax.set_xscale("log")
     ax.set_yscale("log")
 
-    ax.set_xlim(1e-10, 1e-7)
+    ax.set_xlim(1e-10, 1e-6)
+    ax.set_ylim(1e-6, 1)
     ax.legend()
 
     plt.savefig(f"/gpfs/projects/CalderGroup/JoshSpace/flame_speed_plots/Comp_S_lam_{S_lam:.2e}.png")
     plt.close(fig)
 
-def negative_F_check(t, y, S_lam, p_fixed, rho_fuel):
+def positive_F_check(t, y, S_lam, p_fixed, rho_fuel):
     return y[0]
 
 def divergent_F_check(t, y, S_lam, p_fixed, rho_fuel):
-    return (1e34 - y[0])
+    return (1e36 + y[0])
 
-negative_F_check.terminal = True
-negative_F_check.direction = -1
+positive_F_check.terminal = True
+positive_F_check.direction = 1
 
 divergent_F_check.terminal = True
 divergent_F_check.direction = -1
@@ -162,6 +163,9 @@ def RHS(t, y, S_lam, p_fixed, rho_fuel):
     # 1) get rho, cp from EOS
     state, rho = invert_eos_for_rho(T, p_fixed, comp)
     cp  = state.c_p
+    print(f"Values for t = {t:.2e}")
+    print(f"c_p = {cp:.2e}")
+    print(f"rho = {rho:.2e}")
 
     thermo = pyna.ThermoState(rho=rho, T=T, comp=comp)
 
@@ -170,17 +174,20 @@ def RHS(t, y, S_lam, p_fixed, rho_fuel):
     dYdt = np.array([ydots[nuc] for nuc in net.unique_nuclei])
     # 3) Compute epsilon via dYdt equations
     epsilon = net.evaluate_energy_generation(thermo, screen_func=chugunov_2007)
+    print(f"epsilon = {epsilon:.2e}")
     
     ele_state, pos_state = ele_eos.pe_state(rho, T, comp)
     p_ele = ele_state.p + pos_state.p
 
     # 4) Conductivity -> K & opacities
     K = Conductivity.get_K(state, comp, rho, T, p_ele, net)
+    print(f"K = {K:.2e}")
     # 5) Compute u
     u = rho_fuel * S_lam / rho
+    print(f"u = {u:.2e}")
     # 6) dTdt and dFdt
     dTdt = -u * F / K
-    dFdt = (u * rho * epsilon) - u * S_lam * rho_fuel * cp * F / K
+    dFdt = (u * rho * epsilon) + (u * S_lam * rho_fuel * cp * F / K)
 
     return [dFdt, dTdt, *dYdt]
 
@@ -191,7 +198,7 @@ def integrator(S_lam, y0, p_fixed, tmax, rho_fuel, all_nuclei, A):
         t_span=[0, tmax], 
         y0=y0,
         args=(S_lam, p_fixed, rho_fuel),
-        events=(negative_F_check, divergent_F_check), 
+        events=(positive_F_check, divergent_F_check), 
         method='BDF', 
         rtol=1e-5, 
         atol=1e-8
@@ -199,16 +206,6 @@ def integrator(S_lam, y0, p_fixed, tmax, rho_fuel, all_nuclei, A):
 
     # Extracting the solution
     F_final = sol.y[0, -1] # indexed as [state variable, time point]
-
-    if sol.t_events[0].size > 0:
-        print("Integrator stopped due to negative F")
-    elif sol.t_events[1].size > 0:
-        print("Integrator stopped because F diverged")
-    else:
-        print("Integrator stopped because tmax was reached")
-
-
-    print(f"Tried S_lam = {S_lam}, returned F = {F_final}")
 
     # Extracting full solutions for plots
     t = sol.t
@@ -220,16 +217,27 @@ def integrator(S_lam, y0, p_fixed, tmax, rho_fuel, all_nuclei, A):
     plot_T(t, T, S_lam)
     plot_X(t, Y, S_lam, all_nuclei, A)
 
+    print(f"Tried S_lam = {S_lam:.2e}, returned F = {F_final:.2e}")
+
+    if sol.t_events[0].size > 0:
+        print("Integrator stopped due to positive F")
+        return 1.0
+    elif sol.t_events[1].size > 0:
+        print("Integrator stopped because F diverged")
+    else:
+        print("Integrator stopped because tmax was reached")
+
+
     # Returning the function we are trying to get to zero
     return F_final
 
 
 # --- Setting Inital Values ---
-T_fuel = 1e9 # Need to set
+T_fuel = 1e8 # Need to set
 rho_fuel = 2e9 # Need to set
 
-F0 = 2e-8 # arbitrarily small positive value
-tmax = 1e-7 # will need to change this
+F0 = -1 # arbitrarily small negative value
+tmax = 1e-6 # will need to change this
 
 # Setting initial mass fractions
 species = net.unique_nuclei
@@ -266,8 +274,9 @@ print(f"Fixed pressure p = {p_fixed}")
 
 
 ## Using brentq to Find The Root
-S_lam_lower_bound = 1e4 #cm/s
-S_lam_upper_bound = 1e5 #cm/s
+S_lam_lower_bound = 1e6 #cm/s
+S_lam_upper_bound = 1e7 #cm/s
+
 
 print("Beginning Shooter")
 S_lam_solution, details = brentq(
@@ -278,6 +287,13 @@ S_lam_solution, details = brentq(
     full_output=True
 )
 
+'''
+print("Beginning Test S_lams")
+S_lams = np.linspace(2e5, 1e6, 20)
+for S_lam in S_lams:
+    print(f"Testing S_lam = {S_lam:.2e}")
+    integrator(S_lam, y0, p_fixed, tmax, rho_fuel, all_nuclei, A)
+'''
 print(f"S_lam: {S_lam_solution:.6f}")
 print(f"Converged in {details.iterations} iterations.")
 
