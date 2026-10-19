@@ -65,10 +65,10 @@ def plot_F(t, F, S_lam):
     ax.set_xscale("log")
     ax.set_yscale("log")
 
-    ax.set_xlim(1e-10, 1e-6)
+    ax.set_xlim(1e-13, 1e-6)
     #ax.set_ylim(1e18, 1e23)
 
-    plt.savefig(f"/gpfs/projects/CalderGroup/JoshSpace/flame_speed_plots/HeatFlux_S_lam_{S_lam:.2e}.png")
+    plt.savefig(f"/gpfs/projects/CalderGroup/JoshSpace/flame_speed_plots/HeatFlux_S_lam_{S_lam}.png")
     plt.close(fig)
 
 def plot_T(t, T, S_lam):
@@ -85,9 +85,9 @@ def plot_T(t, T, S_lam):
     ax.set_xscale("log")
     ax.set_yscale("log")
 
-    ax.set_xlim(1e-10, 1e-6)
+    ax.set_xlim(1e-13, 1e-6)
 
-    plt.savefig(f"/gpfs/projects/CalderGroup/JoshSpace/flame_speed_plots/Temp_S_lam_{S_lam:.2e}.png")
+    plt.savefig(f"/gpfs/projects/CalderGroup/JoshSpace/flame_speed_plots/Temp_S_lam_{S_lam}.png")
     plt.close(fig)
 
 def plot_X(t, Y, S_lam, all_nuclei, A):
@@ -110,24 +110,30 @@ def plot_X(t, Y, S_lam, all_nuclei, A):
     ax.set_xscale("log")
     ax.set_yscale("log")
 
-    ax.set_xlim(1e-10, 1e-6)
+    ax.set_xlim(5e-11, 1e-6)
     ax.set_ylim(1e-6, 1)
     ax.legend()
 
-    plt.savefig(f"/gpfs/projects/CalderGroup/JoshSpace/flame_speed_plots/Comp_S_lam_{S_lam:.2e}.png")
+    plt.savefig(f"/gpfs/projects/CalderGroup/JoshSpace/flame_speed_plots/Comp_S_lam_{S_lam}.png")
     plt.close(fig)
 
 def positive_F_check(t, y, S_lam, p_fixed, rho_fuel):
     return y[0]
 
-def divergent_F_check(t, y, S_lam, p_fixed, rho_fuel):
-    return (1e36 + y[0])
+#def divergent_F_check(t, y, S_lam, p_fixed, rho_fuel):
+#    return (1e36 + y[0])
+
+def divergent_T_check(t, y, S_lam, p_fixed, rho_fuel):
+    return (1e10 - y[1])
 
 positive_F_check.terminal = True
 positive_F_check.direction = 1
 
-divergent_F_check.terminal = True
-divergent_F_check.direction = -1
+#divergent_F_check.terminal = True
+#divergent_F_check.direction = -1
+
+divergent_T_check.terminal = True
+divergent_T_check.direction = -1
 
 
 def invert_eos_for_rho(T, p_fixed, comp):
@@ -198,7 +204,7 @@ def integrator(S_lam, y0, p_fixed, tmax, rho_fuel, all_nuclei, A):
         t_span=[0, tmax], 
         y0=y0,
         args=(S_lam, p_fixed, rho_fuel),
-        events=(positive_F_check, divergent_F_check), 
+        events=(positive_F_check, divergent_T_check), 
         method='BDF', 
         rtol=1e-5, 
         atol=1e-8
@@ -217,15 +223,20 @@ def integrator(S_lam, y0, p_fixed, tmax, rho_fuel, all_nuclei, A):
     plot_T(t, T, S_lam)
     plot_X(t, Y, S_lam, all_nuclei, A)
 
-    print(f"Tried S_lam = {S_lam:.2e}, returned F = {F_final:.2e}")
+    print(f"Tried S_lam = {S_lam}, returned F = {F_final:.2e}")
 
     if sol.t_events[0].size > 0:
         print("Integrator stopped due to positive F")
         return 1.0
     elif sol.t_events[1].size > 0:
         print("Integrator stopped because F diverged")
+        return -1.0
     else:
         print("Integrator stopped because tmax was reached")
+        F_peak = np.max(np.abs(F))
+        F_norm = F_final / F_peak
+        print(f"F_norm = {F_norm}")
+        return -1 * F_norm
 
 
     # Returning the function we are trying to get to zero
@@ -274,8 +285,8 @@ print(f"Fixed pressure p = {p_fixed}")
 
 
 ## Using brentq to Find The Root
-S_lam_lower_bound = 1e6 #cm/s
-S_lam_upper_bound = 1e7 #cm/s
+S_lam_lower_bound = 4.375e6 #cm/s
+S_lam_upper_bound = 4.400e6 #cm/s
 
 
 print("Beginning Shooter")
