@@ -239,10 +239,6 @@ def integrator(S_lam, y0, p_fixed, tmax, rho_fuel, all_nuclei, A):
         return -1 * F_norm
 
 
-    # Returning the function we are trying to get to zero
-    return F_final
-
-
 # --- Setting Inital Values ---
 T_fuel = 1e8 # Need to set
 rho_fuel = 2e9 # Need to set
